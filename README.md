@@ -1,4 +1,6 @@
-![Logo IFMG](https://www.ifmg.edu.br/portal/centrais-de-conteudos/publicacoes/informativo/183/183_arquivos/logo-1.png/@@images/5076e06e-d465-431a-b2cd-0b728c0227e3.png)
+<div align="center">
+
+<img src="https://www.ifmg.edu.br/portal/centrais-de-conteudos/publicacoes/informativo/183/183_arquivos/logo-1.png/@@images/5076e06e-d465-431a-b2cd-0b728c0227e3.png" alt="Logo IFMG" width="200"/>
 
 # 🚨 Sensor de Alarme com Detector de Movimento (PIR)
 
@@ -6,6 +8,8 @@
 
 👨‍💻 Estudante: Eduardo Octavio de Paula Souza
 👨‍🏫 Professor: Charles Tim Batista Garrocho
+
+</div>
 
 ---
 
