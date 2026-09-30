@@ -1,0 +1,2 @@
+docker exec -it mosquitto-broker-iot mosquitto_pub -t "alarme/comando/sistema" -m "ON"
+docker exec -it mosquitto-broker-iot mosquitto_pub -t "alarme/comando/sistema" -m "OFF"
