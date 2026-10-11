@@ -1,68 +1,79 @@
 const mqtt = require('mqtt');
+const { createClient } = require('redis');
 
 // ===== CONFIGURAÇÕES =====
 const BROKER_URL = 'mqtt://192.168.2.168:1883';
+const REDIS_URL = 'redis://localhost:6379';
 const TOPICO_TELEMETRIA = 'alarme/sensor/pir';
 const TOPICO_COMANDO = 'alarme/comando/sistema';
+const LIMITE_HISTORICO = 100;
 
-// ===== CONEXÃO COM O BROKER =====
-const client = mqtt.connect(BROKER_URL, {
-  clientId: 'gateway-alarme-01'
-});
+// ===== REDIS =====
+const redis = createClient({ url: REDIS_URL });
+redis.on('error', (err) => console.log('Erro Redis:', err.message));
 
-client.on('connect', () => {
-  console.log('Gateway conectado ao broker MQTT.');
+function chave(deviceId, tipo) {
+  return `device:${deviceId}:${tipo}`;
+}
 
-  client.subscribe([TOPICO_TELEMETRIA, TOPICO_COMANDO], (err) => {
-    if (!err) {
-      console.log('Assinatura realizada nos tópicos definidos.');
-    } else {
-      console.log('Erro ao assinar tópicos:', err);
+// ===== INÍCIO =====
+async function iniciar() {
+  await redis.connect();
+  console.log('Gateway conectado ao Redis.');
+
+  const client = mqtt.connect(BROKER_URL, { clientId: 'gateway-alarme-01' });
+
+  client.on('connect', () => {
+    console.log('Gateway conectado ao broker MQTT.');
+    client.subscribe([TOPICO_TELEMETRIA, TOPICO_COMANDO], (err) => {
+      if (!err) console.log('Assinatura realizada nos tópicos definidos.');
+    });
+  });
+
+  client.on('error', (err) => console.log('Erro MQTT:', err.message));
+
+  client.on('message', async (topico, payload) => {
+    const mensagemBruta = payload.toString();
+
+    if (topico === TOPICO_TELEMETRIA) {
+      await processarTelemetria(mensagemBruta);
+    } else if (topico === TOPICO_COMANDO) {
+      console.log(`[COMANDO] ${mensagemBruta}`);
     }
   });
-});
+}
 
-client.on('error', (err) => {
-  console.log('Erro de conexão MQTT:', err);
-});
-
-// ===== RECEBIMENTO DE MENSAGENS =====
-client.on('message', (topico, payload) => {
-  const mensagemBruta = payload.toString();
-
-  if (topico === TOPICO_TELEMETRIA) {
-    processarTelemetria(mensagemBruta);
-  } else if (topico === TOPICO_COMANDO) {
-    console.log(`[COMANDO] ${mensagemBruta}`);
-  }
-});
-
-// ===== PROCESSAMENTO DA TELEMETRIA =====
-function processarTelemetria(mensagemBruta) {
+// ===== PROCESSAMENTO =====
+async function processarTelemetria(mensagemBruta) {
   let dados;
 
-  // Tenta interpretar o JSON
   try {
     dados = JSON.parse(mensagemBruta);
   } catch (erro) {
-    registrarInvalida(mensagemBruta, 'JSON malformado');
+    console.log(`[INVÁLIDA] motivo=JSON malformado payload=${mensagemBruta}`);
     return;
   }
 
-  // Valida os campos esperados
   const erros = validarCampos(dados);
   if (erros.length > 0) {
-    registrarInvalida(mensagemBruta, erros.join('; '));
+    console.log(`[INVÁLIDA] motivo=${erros.join('; ')} payload=${mensagemBruta}`);
     return;
   }
 
-  registrarValida(dados);
+  console.log(
+    `[VÁLIDA] dispositivo=${dados.deviceId} ` +
+    `sensorPIR=${dados.sensorPIR} timestamp=${dados.timestamp}`
+  );
+
+  try {
+    await persistir(dados);
+  } catch (erro) {
+    console.log('Falha ao gravar no Redis:', erro.message);
+  }
 }
 
-// ===== VALIDAÇÃO DOS CAMPOS =====
 function validarCampos(dados) {
   const erros = [];
-
   if (typeof dados.deviceId !== 'string' || dados.deviceId.length === 0) {
     erros.push('campo deviceId ausente ou inválido');
   }
@@ -72,18 +83,20 @@ function validarCampos(dados) {
   if (typeof dados.timestamp !== 'number') {
     erros.push('campo timestamp ausente ou não numérico');
   }
-
   return erros;
 }
 
-// ===== REGISTROS (LOGS) =====
-function registrarValida(dados) {
-  console.log(
-    `[VÁLIDA] dispositivo=${dados.deviceId} ` +
-    `sensorPIR=${dados.sensorPIR} timestamp=${dados.timestamp}`
-  );
+// ===== PERSISTÊNCIA =====
+async function persistir(dados) {
+  const agora = new Date().toISOString();
+  const registro = JSON.stringify({ ...dados, receivedAt: agora });
+
+  await redis.set(chave(dados.deviceId, 'state'), registro);
+  await redis.lPush(chave(dados.deviceId, 'history'), registro);
+  await redis.lTrim(chave(dados.deviceId, 'history'), 0, LIMITE_HISTORICO - 1);
+  await redis.set(chave(dados.deviceId, 'lastSeen'), agora);
+
+  console.log(`[REDIS] dados de ${dados.deviceId} gravados.`);
 }
 
-function registrarInvalida(mensagemBruta, motivo) {
-  console.log(`[INVÁLIDA] motivo=${motivo} payload=${mensagemBruta}`);
-}
+iniciar();
