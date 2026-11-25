@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Central de Alarme PIR</title>
+<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='4' fill='%23050805'/%3E%3Cpath d='M12 3.5l7 2.6v5.6c0 4.4-3 7.4-7 8.8-4-1.4-7-4.4-7-8.8V6.1z' fill='%2333ff66'/%3E%3Cpath d='M8.8 12l2.2 2.2 4.2-4.4' stroke='%23050805' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geo:ital@0;1&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050805;
+    --panel: #0a110a;
+    --verde: #33ff66;
+    --verde-dim: #1f9a3f;
+    --ambar: #ffb000;
+    --vermelho: #ff4d3d;
+    --cinza: #6f8a76;
+    --texto: #b6ffc9;
+    --titulo: 'Geo', 'Share Tech Mono', monospace;
+    --mono: 'Share Tech Mono', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--texto); }
+  body {
+    font-family: var(--mono);
+    font-size: 17px;
+    line-height: 1.45;
+    min-height: 100vh;
+    padding: 18px 16px 40px;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.2) 3px);
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9;
+    background: radial-gradient(ellipse at center, rgba(51,255,102,.05) 0%, rgba(0,0,0,.55) 100%);
+  }
+  body.disparo::before {
+    background: radial-gradient(ellipse at center, rgba(255,77,61,.10) 0%, rgba(60,0,0,.6) 100%);
+  }
+  #bordaAlarme {
+    display: none; position: fixed; inset: 0; pointer-events: none; z-index: 11;
+    border: 6px solid var(--vermelho);
+    box-shadow: inset 0 0 40px rgba(255,77,61,.55);
+    animation: pulsa 1s ease-in-out infinite;
+  }
+  body.disparo #bordaAlarme { display: block; }
+
+  .tela { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+
+  .ic { width: 1.25em; height: 1.25em; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.28em; flex: none; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #030603; border-left: 1px solid var(--verde-dim); }
+  ::-webkit-scrollbar-thumb { background: var(--verde-dim); border: 1px solid #030603; border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--verde); }
+  ::-webkit-scrollbar-corner { background: #030603; }
+  @supports (-moz-appearance: none) {
+    * { scrollbar-width: thin; scrollbar-color: var(--verde-dim) #030603; }
+  }
+
+  header { border: 2px double var(--verde-dim); padding: 10px 14px 12px; margin-bottom: 14px; }
+  .topo { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 18px; color: var(--verde-dim); }
+  .topo b { font-weight: 400; color: var(--texto); }
+  .central { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px 28px; }
+  .central-info { flex: 1 1 420px; min-width: 0; }
+  .controle { flex: 0 1 auto; padding-bottom: 2px; }
+  .controle .rotulo { color: var(--verde-dim); letter-spacing: .12em; font-family: var(--titulo); font-size: .9rem; display: flex; align-items: center; gap: 8px; }
+  .controle .botoes { margin: 6px 0 6px; }
+  #statusGeral {
+    font-family: var(--titulo); font-size: 2.3rem; letter-spacing: .08em; line-height: 1.15;
+    margin: 6px 0 8px; display: flex; align-items: center; gap: 12px;
+    text-shadow: 0 0 8px currentColor;
+  }
+  #statusGeral .ic { width: 1.1em; height: 1.1em; }
+  .leds { display: flex; flex-wrap: wrap; gap: 8px 22px; border-top: 1px dotted var(--verde-dim); padding-top: 8px; }
+  .led { display: inline-flex; align-items: center; gap: 8px; color: var(--cinza); font-size: .95rem; letter-spacing: .06em; }
+  .led i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--cinza); background: #0b130c; display: inline-block; }
+  .led.on-verde { color: var(--verde); } .led.on-verde i { background: var(--verde); border-color: var(--verde); box-shadow: 0 0 9px var(--verde); }
+  .led.on-ambar { color: var(--ambar); } .led.on-ambar i { background: var(--ambar); border-color: var(--ambar); box-shadow: 0 0 9px var(--ambar); }
+  .led.on-vermelho { color: var(--vermelho); } .led.on-vermelho i { background: var(--vermelho); border-color: var(--vermelho); box-shadow: 0 0 9px var(--vermelho); }
+
+  #bannerAlarme {
+    display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 18px;
+    background: rgba(255,77,61,.12); border: 2px solid var(--vermelho); color: var(--vermelho);
+    padding: 10px 14px; margin-bottom: 14px;
+  }
+  body.disparo #bannerAlarme { display: flex; }
+  #bannerAlarme .msg { font-family: var(--titulo); font-size: 1.25rem; letter-spacing: .06em; display: flex; align-items: center; gap: 10px; }
+  #bannerAlarme .msg .ic { animation: pulsa 1s ease-in-out infinite; }
+  #banner { display: none; border: 2px solid var(--ambar); color: var(--ambar); padding: 8px 14px; margin-bottom: 14px; font-family: var(--titulo); letter-spacing: .08em; }
+
+  .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .painel { border: 1px solid var(--verde-dim); background: var(--panel); padding: 12px 14px 14px; }
+  .painel > h2 {
+    font-family: var(--titulo); font-weight: 400; font-size: 1rem; letter-spacing: .12em; color: var(--verde);
+    margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px dotted var(--verde-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .largo { grid-column: 1 / -1; }
+
+  .grande { font-size: 1.9rem; line-height: 1.15; margin: 4px 0 8px; font-family: var(--titulo); letter-spacing: .05em; }
+  .linha { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 10px; border-bottom: 1px dotted rgba(31,154,63,.4); padding: 2px 0; }
+  .linha span:first-child { color: var(--verde-dim); }
+  .ok { color: var(--verde); }
+  .alerta { color: var(--vermelho); text-shadow: 0 0 8px rgba(255,77,61,.6); }
+  .espera { color: var(--ambar); text-shadow: 0 0 8px rgba(255,176,0,.5); }
+  .mudo { color: var(--cinza); }
+  .piscando { animation: pulsa 1.2s ease-in-out infinite; }
+  @keyframes pulsa { 50% { opacity: .4; } }
+  .cursor { display: inline-block; width: .6em; height: 1em; background: var(--verde); vertical-align: -2px; margin-left: 4px; animation: pisca 1s steps(1) infinite; }
+  @keyframes pisca { 50% { opacity: 0; } }
+
+  .botoes { display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0 10px; }
+  button {
+    font-family: var(--titulo); font-size: 1.05rem; letter-spacing: .1em;
+    background: transparent; color: var(--verde); border: 2px solid var(--verde);
+    padding: 10px 20px; cursor: pointer; text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button:hover:not(:disabled) { background: var(--verde); color: var(--bg); }
+  button.parar { color: var(--cinza); border-color: var(--cinza); }
+  button.parar:hover:not(:disabled) { background: var(--cinza); color: var(--bg); }
+  button.ack { color: var(--vermelho); border-color: var(--vermelho); }
+  button.ack:hover:not(:disabled) { background: var(--vermelho); color: var(--bg); }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button:focus-visible { outline: 3px solid var(--ambar); outline-offset: 3px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-family: var(--titulo); font-weight: 400; text-align: left; color: var(--verde-dim); border-bottom: 1px solid var(--verde-dim); padding: 3px 6px; letter-spacing: .08em; }
+  td { padding: 3px 6px; border-bottom: 1px dotted rgba(31,154,63,.3); }
+
+  .acoes { display: inline-flex; gap: 8px; }
+  button.mini { font-size: .85rem; padding: 4px 12px; border-width: 1px; letter-spacing: .08em; }
+  dialog { background: var(--panel); color: var(--texto); border: 2px double var(--verde-dim); padding: 0; width: min(780px, 94vw); font-family: var(--mono); }
+  dialog::backdrop { background: rgba(0, 0, 0, .78); }
+  .modal-topo { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px dotted var(--verde-dim); }
+  .modal-topo h2 { margin: 0; font-family: var(--titulo); font-weight: 400; font-size: 1rem; letter-spacing: .12em; color: var(--verde); display: flex; align-items: center; gap: 8px; }
+  .corpo-chave { padding: 14px; }
+  .corpo-chave label { display: block; color: var(--verde-dim); margin-bottom: 8px; }
+  .corpo-chave input { width: 100%; font-family: var(--mono); font-size: 1.1rem; color: var(--verde); background: #030603; border: 1px solid var(--verde-dim); padding: 8px 10px; letter-spacing: .15em; }
+  .corpo-chave input:focus { outline: 2px solid var(--ambar); outline-offset: 2px; }
+  .corpo-chave .botoes { margin-top: 12px; margin-bottom: 0; }
+  #modalChave { width: min(440px, 94vw); }
+  #log { height: min(55vh, 460px); overflow-y: auto; padding: 8px 12px; background: #030603; font-size: .95rem; }
+  #log div.err { color: var(--vermelho); }
+  #log div.pend { color: var(--ambar); }
+  #log div.conf { color: var(--verde); }
+  footer { margin-top: 16px; color: var(--verde-dim); font-size: .9rem; }
+
+  @media (max-width: 900px) {
+    .grade { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    #statusGeral { font-size: 1.6rem; }
+    .grande { font-size: 1.55rem; }
+    body { font-size: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cursor, .piscando, #bordaAlarme, #bannerAlarme .msg .ic { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-shield-off" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+  <symbol id="i-siren" viewBox="0 0 24 24"><path d="M7 17v-5a5 5 0 0 1 10 0v5"/><path d="M5 17h14v3H5z"/><path d="M12 2.5v2M4.5 6l1.5 1.5M19.5 6L18 7.5M2.5 12h2M19.5 12h2"/></symbol>
+  <symbol id="i-motion" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><path d="M10 8a5.5 5.5 0 0 1 0 8M14.5 5a10 10 0 0 1 0 14M19 2.5a14 14 0 0 1 0 19"/></symbol>
+  <symbol id="i-signal" viewBox="0 0 24 24"><path d="M4 20v-3M9 20v-7M14 20V9M19 20V4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.2v.3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9l3 3-3 3M13 15h4"/></symbol>
+</svg>
+
+<dialog id="modalLog" aria-labelledby="h-log">
+  <div class="modal-topo">
+    <h2 id="h-log"><svg class="ic"><use href="#i-terminal"/></svg>LOG DE EVENTOS</h2>
+    <button id="btnFechar" type="button" class="mini">Fechar</button>
+  </div>
+  <div id="log" role="log"></div>
+</dialog>
+
+<dialog id="modalChave" aria-labelledby="h-chave">
+  <form id="formChave" autocomplete="off">
+    <div class="modal-topo">
+      <h2 id="h-chave"><svg class="ic"><use href="#i-lock"/></svg>CHAVE DE ACESSO</h2>
+    </div>
+    <div class="corpo-chave">
+      <label for="campoChave">&gt; informe a chave para armar/desarmar</label>
+      <input id="campoChave" type="password" maxlength="128" required autocomplete="off">
+      <div class="botoes">
+        <button type="submit" class="mini">Salvar</button>
+        <button type="button" id="btnChaveCancelar" class="mini parar">Cancelar</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div id="bordaAlarme" aria-hidden="true"></div>
+
+<div class="tela">
+  <header>
+    <div class="topo">
+      <span>CENTRAL DE ALARME // <b id="devId">esp32-alarme-01</b></span>
+      <span>API: <b id="apiStatus" class="espera">CONECTANDO...</b></span>
+      <span id="relogio">--</span>
+      <span class="acoes"><button id="btnChave" type="button" class="mini"><svg class="ic"><use href="#i-lock"/></svg>Chave</button> <button id="btnLog" type="button" class="mini"><svg class="ic"><use href="#i-terminal"/></svg>Log</button></span>
+    </div>
+    <div class="central">
+      <div class="central-info">
+        <div id="statusGeral" class="mudo" aria-live="assertive">
+          <svg class="ic" id="statusIcone"><use href="#i-shield-off"/></svg>
+          <span id="statusTexto">AGUARDANDO DADOS<span class="cursor" aria-hidden="true"></span></span>
+        </div>
+        <div class="leds" role="group" aria-label="Indicadores da central">
+          <span class="led" id="ledArmado"><i></i>ARMADO</span>
+          <span class="led" id="ledDisparo"><i></i>DISPARO</span>
+          <span class="led" id="ledPendente"><i></i>PENDENTE</span>
+          <span class="led" id="ledCom"><i></i>COMUNICAÇÃO</span>
+        </div>
+      </div>
+      <div class="controle" role="group" aria-label="Controle remoto">
+        <div class="rotulo"><svg class="ic"><use href="#i-lock"/></svg>CONTROLE REMOTO</div>
+        <div class="botoes">
+          <button id="btnOn" type="button"><svg class="ic"><use href="#i-lock"/></svg>Armar</button>
+          <button id="btnOff" type="button" class="parar"><svg class="ic"><use href="#i-unlock"/></svg>Desarmar</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="bannerAlarme" role="alert">
+    <div class="msg"><svg class="ic"><use href="#i-siren"/></svg><span id="alarmeTexto">ALARME DISPARADO</span></div>
+    <button id="btnAck" type="button" class="ack"><svg class="ic"><use href="#i-warning"/></svg>Reconhecer</button>
+  </div>
+  <div id="banner" role="alert"></div>
+
+  <main class="grade" aria-live="polite">
+    <section class="painel" aria-labelledby="h-sensor">
+      <h2 id="h-sensor"><svg class="ic"><use href="#i-motion"/></svg>ZONA 1 – SENSOR PIR</h2>
+      <div id="sensorGrande" class="grande mudo">--</div>
+      <div class="linha"><span>ÚLTIMA LEITURA</span><span id="sensorHora">--</span></div>
+      <div class="linha"><span>UPTIME DO ESP32</span><span id="sensorUptime">--</span></div>
+    </section>
+
+    <section class="painel" aria-labelledby="h-atuador">
+      <h2 id="h-atuador"><svg class="ic"><use href="#i-shield"/></svg>SISTEMA DE ALARME</h2>
+      <div id="atuadorGrande" class="grande mudo">--</div>
+      <div class="linha"><span>SOLICITADO</span><span id="atuadorDesejado">--</span></div>
+      <div class="linha"><span>STATUS</span><span id="atuadorStatus">--</span></div>
+      <div class="linha"><span>CONFIRMADO EM</span><span id="atuadorConfirmadoEm">--</span></div>
+    </section>
+
+    <section class="painel" aria-labelledby="h-presenca">
+      <h2 id="h-presenca"><svg class="ic"><use href="#i-signal"/></svg>PRESENÇA DO DISPOSITIVO</h2>
+      <div id="presencaGrande" class="grande mudo">--</div>
+      <div class="linha"><span>ÚLTIMO CONTATO</span><span id="presencaHora">--</span></div>
+      <div class="linha"><span>HÁ</span><span id="presencaHa">--</span></div>
+    </section>
+
+    <section class="painel largo" aria-labelledby="h-hist">
+      <h2 id="h-hist"><svg class="ic"><use href="#i-list"/></svg>HISTÓRICO DE TELEMETRIA (10 MAIS RECENTES)</h2>
+      <table>
+        <thead><tr><th>#</th><th>HORA</th><th>ZONA 1</th><th>UPTIME</th></tr></thead>
+        <tbody id="histCorpo"><tr><td colspan="4" class="mudo">carregando...</td></tr></tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <footer>&gt; o estado do sistema exibido é sempre o CONFIRMADO pelo ESP32 · atualização a cada 2 s</footer>
+</div>
+
+<script>
+(function () {
+  const DEVICE = 'esp32-alarme-01';
+  const API = '/api/devices/' + DEVICE;
+  const INTERVALO_MS = 2000;
+  const PENDENTE_MAX_S = 20;
+  const $ = (id) => document.getElementById(id);
+
+  let atuadorAtual = null;
+  let enviando = false;
+  let ultimaChave = null;
+  let disparoPendente = null;   // receivedAt do disparo ainda não reconhecido
+  let reconhecido = null;       // receivedAt do último disparo reconhecido
+
+  // chave guardada só na sessão do navegador
+  let chaveMemoria = '';
+  function getChave() {
+    try { return sessionStorage.getItem('alarme_chave') || chaveMemoria; } catch (e) { return chaveMemoria; }
+  }
+  function setChave(v) {
+    chaveMemoria = v;
+    try { if (v) sessionStorage.setItem('alarme_chave', v); else sessionStorage.removeItem('alarme_chave'); } catch (e) {}
+  }
+  function abrirChave() {
+    $('campoChave').value = '';
+    $('modalChave').showModal();
+  }
+
+  function fmtData(iso) {
+    return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '--';
+  }
+  function fmtCurta(iso) {
+    return iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--';
+  }
+  let faviconAlarme = null;
+  function setFavicon(alarme) {
+    if (faviconAlarme === alarme) return;
+    faviconAlarme = alarme;
+    const cor = alarme ? '%23ff4d3d' : '%2333ff66';
+    const forma = alarme
+      ? "%3Cpath d='M7 18v-6a5 5 0 0 1 10 0v6z' fill='" + cor + "'/%3E%3Cpath d='M5 18h14v3H5zM12 2.5v2.5M4.5 6l1.7 1.7M19.5 6l-1.7 1.7' stroke='" + cor + "' stroke-width='1.8' fill='" + cor + "' stroke-linecap='round'/%3E"
+      : "%3Cpath d='M12 3.5l7 2.6v5.6c0 4.4-3 7.4-7 8.8-4-1.4-7-4.4-7-8.8V6.1z' fill='" + cor + "'/%3E%3Cpath d='M8.8 12l2.2 2.2 4.2-4.4' stroke='%23050805' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E";
+    $('favicon').setAttribute('href', "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='4' fill='%23050805'/%3E" + forma + "%3C/svg%3E");
+  }
+  function fmtHora(iso) {
+    return iso ? new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '--';
+  }
+  function fmtDuracao(seg) {
+    if (seg == null) return '--';
+    if (seg < 60) return seg + ' s';
+    const m = Math.floor(seg / 60);
+    if (m < 60) return m + ' min ' + (seg % 60) + ' s';
+    return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+  }
+  function fmtUptime(ms) {
+    return typeof ms === 'number' ? Math.round(ms / 1000) + ' s' : '--';
+  }
+  function setTexto(id, texto, classe) {
+    const el = $(id);
+    el.textContent = texto;
+    if (classe !== undefined) {
+      el.className = el.className.replace(/\b(ok|alerta|espera|mudo|piscando)\b/g, '').trim();
+      if (classe) el.className = (el.className + ' ' + classe).trim();
+    }
+  }
+  function setLed(id, cor) {
+    $(id).className = 'led' + (cor ? ' on-' + cor : '');
+  }
+  function log(texto, tipo) {
+    const box = $('log');
+    const d = document.createElement('div');
+    if (tipo) d.className = tipo;
+    d.textContent = fmtHora(new Date().toISOString()) + '  ' + texto;
+    box.appendChild(d);
+    while (box.children.length > 60) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function pegar(caminho) {
+    const r = await fetch(API + caminho);
+    let body = {};
+    try { body = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, body };
+  }
+
+  // Disparo = armado + movimento depois de armar, ainda não reconhecido
+  function detectarDisparo(hi, ac, armado) {
+    if (!armado || !hi.ok) return;
+    const desde = ac.confirmedAt ? new Date(ac.confirmedAt).getTime() : 0;
+    const ev = hi.body.history.find((h) => h.sensorPIR && new Date(h.receivedAt).getTime() >= desde);
+    if (ev && ev.receivedAt !== reconhecido && ev.receivedAt !== disparoPendente) {
+      disparoPendente = ev.receivedAt;
+      log('!! DISPARO – ZONA 1 – movimento às ' + fmtHora(ev.receivedAt), 'err');
+    }
+  }
+
+  function renderStatusGeral(armado, pendente, ac) {
+    const status = $('statusGeral');
+    const icone = $('statusIcone').firstElementChild;
+    let texto, classe, ic;
+    if (disparoPendente) { texto = 'ALARME DISPARADO'; classe = 'alerta'; ic = 'i-siren'; }
+    else if (pendente) { texto = 'AGUARDANDO CONFIRMAÇÃO'; classe = 'espera'; ic = 'i-shield'; }
+    else if (armado) { texto = 'SISTEMA ARMADO'; classe = 'ok'; ic = 'i-shield'; }
+    else if (ac) { texto = 'SISTEMA DESARMADO'; classe = 'mudo'; ic = 'i-shield-off'; }
+    else { texto = 'ESTADO DESCONHECIDO'; classe = 'mudo'; ic = 'i-shield-off'; }
+    status.className = classe + (disparoPendente || pendente ? ' piscando' : '');
+    $('statusTexto').textContent = texto;
+    icone.setAttribute('href', '#' + ic);
+    document.body.classList.toggle('disparo', !!disparoPendente);
+    document.title = (disparoPendente ? '!! DISPARO – ' : '') + 'Central de Alarme PIR';
+    setFavicon(!!disparoPendente);
+    if (disparoPendente) $('alarmeTexto').textContent = 'ALARME DISPARADO – ZONA 1 – ' + fmtHora(disparoPendente);
+  }
+
+  function renderLeds(armado, pendente, pr) {
+    setLed('ledArmado', armado ? 'verde' : '');
+    setLed('ledDisparo', disparoPendente ? 'vermelho' : '');
+    setLed('ledPendente', pendente ? 'ambar' : '');
+    if (!pr || !pr.ok) setLed('ledCom', 'vermelho');
+    else setLed('ledCom', pr.body.online ? 'verde' : 'vermelho');
+  }
+
+  function renderSensor(r, armado, ac) {
+    if (!r.ok) {
+      setTexto('sensorGrande', r.status === 404 ? 'SEM DADOS' : 'INDISPONÍVEL', 'mudo');
+      return;
+    }
+    const s = r.body.state;
+    const desde = ac && ac.confirmedAt ? new Date(ac.confirmedAt).getTime() : 0;
+    const movimentoAgora = armado && s.sensorPIR && new Date(s.receivedAt).getTime() >= desde;
+    if (!armado) setTexto('sensorGrande', 'ZONA INATIVA', 'mudo');
+    else if (movimentoAgora) setTexto('sensorGrande', '!! MOVIMENTO !!', 'alerta piscando');
+    else setTexto('sensorGrande', 'ZONA LIVRE', 'ok');
+    setTexto('sensorHora', fmtCurta(s.receivedAt));
+    setTexto('sensorUptime', fmtUptime(s.timestamp));
+  }
+
+  function renderAtuador(r) {
+    if (!r.ok) {
+      atuadorAtual = null;
+      setTexto('atuadorGrande', r.status === 404 ? 'SEM DADOS' : 'INDISPONÍVEL', 'mudo');
+      return;
+    }
+    const a = r.body.actuator;
+    atuadorAtual = a;
+    if (a.confirmed === 'ON') setTexto('atuadorGrande', 'ARMADO', 'ok');
+    else if (a.confirmed === 'OFF') setTexto('atuadorGrande', 'DESARMADO', 'mudo');
+    else setTexto('atuadorGrande', 'DESCONHECIDO', 'mudo');
+
+    setTexto('atuadorDesejado', a.desired === 'ON' ? 'ARMAR' : a.desired === 'OFF' ? 'DESARMAR' : '--');
+    if (a.status === 'pending') {
+      const seg = Math.round((Date.now() - new Date(a.sentAt).getTime()) / 1000);
+      setTexto('atuadorStatus', 'PENDENTE (há ' + fmtDuracao(seg) + ')', 'espera piscando');
+    } else {
+      setTexto('atuadorStatus', 'CONFIRMADO', 'ok');
+    }
+    setTexto('atuadorConfirmadoEm', fmtCurta(a.confirmedAt));
+
+    const chave = a.requestId + ':' + a.status;
+    if (ultimaChave !== null && chave !== ultimaChave && a.status === 'confirmed') {
+      log('< CONFIRMADO pelo ESP32: sistema ' + (a.confirmed === 'ON' ? 'ARMADO' : 'DESARMADO') + ' (' + a.requestId + ')', 'conf');
+    }
+    ultimaChave = chave;
+  }
+
+  function renderPresenca(r) {
+    if (!r.ok) {
+      setTexto('presencaGrande', r.status === 404 ? 'SEM DADOS' : 'INDISPONÍVEL', 'mudo');
+      return;
+    }
+    const p = r.body;
+    if (p.online) setTexto('presencaGrande', 'ONLINE', 'ok');
+    else setTexto('presencaGrande', 'OFFLINE', 'alerta');
+    setTexto('presencaHora', fmtCurta(p.lastSeen));
+    setTexto('presencaHa', fmtDuracao(p.secondsSinceLastSeen));
+  }
+
+  function renderHistorico(r) {
+    const corpo = $('histCorpo');
+    corpo.textContent = '';
+    if (!r.ok) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 4; td.className = 'mudo';
+      td.textContent = r.status === 404 ? 'sem registros' : 'histórico indisponível';
+      tr.appendChild(td); corpo.appendChild(tr);
+      return;
+    }
+    r.body.history.forEach((h, i) => {
+      const tr = document.createElement('tr');
+      const cel = (t, c) => { const td = document.createElement('td'); td.textContent = t; if (c) td.className = c; tr.appendChild(td); };
+      cel(String(i + 1).padStart(2, '0'), 'mudo');
+      cel(fmtData(h.receivedAt));
+      cel(h.sensorPIR ? 'MOVIMENTO' : 'LIVRE', h.sensorPIR ? 'alerta' : 'ok');
+      cel(fmtUptime(h.timestamp));
+      corpo.appendChild(tr);
+    });
+  }
+
+  // Regras dos botões:
+  //  - armado confirmado    -> Armar bloqueado
+  //  - desarmado confirmado -> Desarmar bloqueado
+  //  - comando pendente     -> ambos bloqueados (até PENDENTE_MAX_S)
+  function atualizarBotoes() {
+    const a = atuadorAtual;
+    const semEstado = !a;
+    let pendente = false;
+    if (a && a.status === 'pending') {
+      const seg = (Date.now() - new Date(a.sentAt).getTime()) / 1000;
+      pendente = seg < PENDENTE_MAX_S;
+    }
+    const ocupado = enviando || pendente;
+    const armado = !!a && a.confirmed === 'ON';
+    const desarmado = !!a && a.confirmed === 'OFF';
+    $('btnOn').disabled = semEstado || ocupado || armado;
+    $('btnOff').disabled = semEstado || ocupado || desarmado;
+  }
+
+  function mostrarApi(ok, texto) {
+    setTexto('apiStatus', texto, ok ? 'ok' : 'alerta');
+  }
+
+  async function atualizar() {
+    try {
+      const [st, ac, pr, hi] = await Promise.all([
+        pegar('/state'), pegar('/actuator'), pegar('/presence'), pegar('/history?limit=10'),
+      ]);
+      const banner = $('banner');
+      const todos = [st, ac, pr, hi];
+      if (todos.some((x) => x.status === 503)) {
+        banner.style.display = 'block';
+        banner.textContent = '!! BANCO DE DADOS (REDIS) INDISPONÍVEL !!';
+        mostrarApi(true, 'ONLINE (REDIS OFFLINE)');
+      } else if (todos.every((x) => x.status === 404)) {
+        banner.style.display = 'block';
+        banner.textContent = '!! DISPOSITIVO ' + DEVICE + ' NÃO ENCONTRADO !!';
+        mostrarApi(true, 'ONLINE');
+      } else {
+        banner.style.display = 'none';
+        mostrarApi(true, 'ONLINE');
+      }
+
+      const a = ac.ok ? ac.body.actuator : null;
+      const armado = !!a && a.confirmed === 'ON';
+      const pendente = !!a && a.status === 'pending';
+
+      renderAtuador(ac);
+      detectarDisparo(hi, a, armado);
+      renderSensor(st, armado, a);
+      renderPresenca(pr);
+      renderHistorico(hi);
+      renderStatusGeral(armado, pendente, a);
+      renderLeds(armado, pendente, pr);
+      atualizarBotoes();
+    } catch (e) {
+      mostrarApi(false, 'OFFLINE');
+      setLed('ledCom', 'vermelho');
+      const banner = $('banner');
+      banner.style.display = 'block';
+      banner.textContent = '!! SEM CONEXÃO COM A API !!';
+    }
+  }
+
+  async function enviar(cmd) {
+    const chaveAcesso = getChave();
+    if (!chaveAcesso) {
+      log('< informe a chave de acesso para enviar comandos', 'err');
+      abrirChave();
+      return;
+    }
+    enviando = true;
+    atualizarBotoes();
+    const nome = cmd === 'ON' ? 'ARMAR' : 'DESARMAR';
+    log('> enviando comando ' + nome + '...', 'pend');
+    try {
+      const r = await fetch(API + '/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': chaveAcesso },
+        body: JSON.stringify({ command: cmd }),
+      });
+      let b = {};
+      try { b = await r.json(); } catch (e) {}
+      if (r.status === 202) log('< ACEITO pela API (' + b.actuator.requestId + '), status PENDENTE', 'pend');
+      else if (r.status === 401 || r.status === 403) {
+        log('< ACESSO NEGADO (' + r.status + '): chave inválida', 'err');
+        setChave('');
+        abrirChave();
+      }
+      else log('< ERRO ' + r.status + ' ' + (b.erro || ''), 'err');
+    } catch (e) {
+      log('< FALHA DE REDE: API inacessível', 'err');
+    }
+    enviando = false;
+    await atualizar();
+  }
+
+  function reconhecer() {
+    if (!disparoPendente) return;
+    log('< disparo reconhecido (' + fmtHora(disparoPendente) + ')');
+    reconhecido = disparoPendente;
+    disparoPendente = null;
+    atualizar();
+  }
+
+  $('btnOn').addEventListener('click', () => enviar('ON'));
+  $('btnOff').addEventListener('click', () => enviar('OFF'));
+  $('btnAck').addEventListener('click', reconhecer);
+
+  const modal = $('modalLog');
+  $('btnLog').addEventListener('click', () => {
+    modal.showModal();
+    $('log').scrollTop = $('log').scrollHeight;
+  });
+  $('btnFechar').addEventListener('click', () => modal.close());
+
+  const modalChave = $('modalChave');
+  $('btnChave').addEventListener('click', abrirChave);
+  $('btnChaveCancelar').addEventListener('click', () => modalChave.close());
+  $('formChave').addEventListener('submit', (e) => {
+    e.preventDefault();
+    setChave($('campoChave').value.trim());
+    modalChave.close();
+    log('> chave de acesso registrada nesta sessão');
+  });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+
+  const relogio = () => { $('relogio').textContent = fmtData(new Date().toISOString()); };
+  relogio();
+  setInterval(relogio, 1000);
+
+  log('> central iniciada');
+  atualizar();
+  setInterval(atualizar, INTERVALO_MS);
+})();
+</script>
+</body>
+</html>

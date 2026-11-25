@@ -1,0 +1,6 @@
+docker exec -it mosquitto-broker-iot mosquitto_pub -t "alarme/comando/sistema" -m "ON"
+docker exec -it mosquitto-broker-iot mosquitto_pub -t "alarme/comando/sistema" -m "OFF"
+
+docker compose up -d
+node index.js em geteway
+node serve.js em api
